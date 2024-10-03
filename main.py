@@ -5,7 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def get_recruitment_info_from_hrmos():
+def get_recruitment_info_from_hrmos(company):
 
     result = []
 
@@ -101,7 +101,7 @@ def get_recruitment_info_from_hrmos():
         return data
     
     try:
-        res = requests.get("https://hrmos.co/pages/superstudio/jobs")
+        res = requests.get(f"https://hrmos.co/pages/{company}")
         res.raise_for_status()
     except requests.RequestException as e:
         print(f"会社ページの取得に失敗しました。 URL: {e}")
@@ -125,7 +125,7 @@ def get_recruitment_info_from_hrmos():
     return result
 
 
-def get_recruitment_info_from_herp():
+def get_recruitment_info_from_herp(company):
     
     result = []
 
@@ -231,11 +231,11 @@ def get_recruitment_info_from_herp():
 
 
     #会社ページを取得
-    company_url = "https://herp.careers/v1/gmomedia"
+
     domain = "https://herp.careers/"
 
     try:
-        res = requests.get(company_url)
+        res = requests.get(f"https://herp.careers/v1/{company}")
         res.raise_for_status()
     except requests.RequestException as e:
         print(f"会社ページの取得に失敗しました。 URL: {e}")
@@ -268,9 +268,16 @@ app = FastAPI()
 @app.post("/")
 async def get_recuruitment_info(item: Item):
 
-    if item.company_url.rstrip("/") == "https://hrmos.co/pages/superstudio/jobs":
-        response = get_recruitment_info_from_hrmos()
-    elif item.company_url.rstrip("/") == "https://herp.careers/v1/gmomedia":
-        response = get_recruitment_info_from_herp()
+    target_company_url = item.company_url
+
+    if target_company_url.startswith("https://hrmos.co"):
+        company = target_company_url.split("pages/")[1].rstrip("/")
+        if not company.endswith("jobs"):
+            company += "/jobs"
+        response = get_recruitment_info_from_hrmos(company)
+    elif target_company_url.startswith("https://herp.careers/v1"):
+        company = target_company_url.split("v1/")[1].rstrip("/")
+        response = get_recruitment_info_from_herp(company)
+
     return response
 
