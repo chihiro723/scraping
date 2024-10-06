@@ -1,132 +1,160 @@
-import requests
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from time import sleep
 
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 result = []
 
 
-def assign_data_based_on_header(header, data, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, background, selection_process, application_method, posting_date_deadline, other_notes, company_info):
+def assign_data_based_on_header(header, data, overview, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, selection_process, application_method, posting_date_deadline, company_info):
   # 項目名とデータを受け取り、適した変数に格納
   
-  if header == "職種 / 募集ポジション":
-      position = data
+  if header in [
+    "企業・事業概要", "HR Tech 事業部について", "わたしたちについて", 
+    "私たちのCredo", "EXAWIZARDSとは", "プロジェクト例", 
+    "もっと知りたい方へ", "情報", "Who we are", "直近のリリース情報"
+  ]:
+      overview = overview + "\n" + data if overview else data
+  elif header in [
+      "求めるポジション", "業務内容", "仕事内容", "担当いただくプロダクト", 
+      "担当いただくプロダクト紹介", "仕事のやりがい・働く魅力", 
+      "ポジションの面白さ", "ポジションの魅力", "ポジションの魅力・得られるスキル", 
+      "募集背景"
+  ]:
+      position = position + "\n" + data if position else data
   elif header in ["勤務地", "勤務場所"]:
       location = location + "\n" + data if location else data
-  elif header in ["雇用形態", "試用機関"]:
+  elif header in ["雇用条件等", "雇用形態", "契約期間", "試用期間"]:
       employment_type = employment_type + "\n" + data if employment_type else data
-  elif header in ["職務内容", "業務内容"]:
+  elif header in ["仕事内容", "業務内容", "職務内容", "タレンティオについて", "プロダクト詳細"]:
       job_description = job_description + "\n" + data if job_description else data
-  elif header in ["必要なスキル/資格", "求めるスキル・経験【必須（MUST)】", "求めるスキル・経験【歓迎（WANT）】", "求める人物像"]:
+  elif header in [
+      "応募資格（必須）", "必須条件", "応募資格（歓迎）", "歓迎条件", 
+      "求める人物像", "求める人材", "求める人物像等", "キャリアパス"
+  ]:
       required_skills = required_skills + "\n" + data if required_skills else data
-  elif header in ["給与", "給与備考", "昇給"]:
+  elif header in ["給与", "賃金", "想定年収", "昇給・賞与"]:
       salary = salary + "\n" + data if salary else data
-  elif header in ["勤務時間", "就業時間", "所定時間外労働", "勤務体系", "休日・休暇"]:
+  elif header in ["勤務時間", "残業", "休日", "休暇", "勤務形態", "勤務形態について", "働き方"]:
       work_system = work_system + "\n" + data if work_system else data
-  elif header in ["待遇・福利厚生", "福利厚生", "保険"]:
+  elif header in ["福利厚生", "社会保険", "受動喫煙防止措置", "諸手当"]:
       benefits = benefits + "\n" + data if benefits else data
-  elif header == "募集背景":
-      background = data
-  elif header in ["選考プロセス", "採用プロセス", "選考フロー", "選考の流れ"]:
+  elif header in [
+      "選考フロー", "選考プロセス", "面接プロセス", "補足", "関連資料"
+  ]:
       selection_process = selection_process + "\n" + data if selection_process else data
   elif header == "応募方法":
       application_method = data
   elif header in ["掲載日", "応募締切日"]:
       posting_date_deadline = posting_date_deadline + "\n" + data if posting_date_deadline else data
-  elif header in ["特記事項", "定年", "その他"]:
+  elif header in ["その他の注意事項", "備考"]:
       other_notes = other_notes + "\n" + data if other_notes else data
-  elif header in ["会社名", "企業名", "設立", "設立年月日", "代表者", "事業内容", "資本金", "本社所在地", "従業員数", "社員数"]:
+  elif header in ["会社情報"]:
       company_info = company_info + "\n" + data if company_info else data
-  return position, location, employment_type, job_description, required_skills, salary, work_system, benefits, background, selection_process, application_method, posting_date_deadline, other_notes, company_info
 
-  
+  return overview, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, selection_process, application_method, posting_date_deadline, company_info
+
+
 def process_job_page(url):
   # 詳細ページのスクレイピング
 
   # 項目名ごとに変数を初期化
-  overview, job_title, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, background, selection_process, application_method, posting_date_deadline, other_notes, company_info = "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
+  overview, job_title, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, selection_process, application_method, posting_date_deadline, company_info = "", "", "", "", "", "", "", "", "", "", "", "", "", ""
 
   # 会社の詳細情報ページを取得
-  try:
-    res = requests.get(url)
-    res.raise_for_status()
-  except requests.RequestException as e:
-    print(f"詳細ページの取得に失敗しました。 {url}: {e}")
-    return None
+  options = Options()
+  options.add_argument('--headless')  # ヘッドレスモードを有効にする
+  driver = webdriver.Chrome(options=options)
+  driver.get(url)
+  wait = WebDriverWait(driver, 10)
+  wait.until(EC.presence_of_element_located((By.CLASS_NAME, "open-page-job-details")))
+  html = driver.page_source.encode('utf-8')
+  driver.quit()
+  soup = BeautifulSoup(html, "html.parser")
 
-  soup = BeautifulSoup(res.text, "html.parser")
 
-  # 「概要」を代入
-  corporate_overview = soup.find("section", class_="pg-markdown jsc-markdown-text")
-  overview = corporate_overview.text if corporate_overview else ""
+  job_details = soup.find('div', class_="open-page-job-details")
 
-  # 「求人タイトル」を代入
-  corporate_name = soup.find("h1", class_="sg-corporate-name")
-  job_title = corporate_name.text if corporate_name else ""
+  # 「求人タイトル」」を代入
+  job_title = job_details.find('h2', class_="open-page-job-details__job-title").string.strip()
 
-  # <tr><th>「項目名」</th><td>「データ」</td></tr>を要素とする配列itemsを作成
-  page_body = soup.find("article", class_="pg-body")
-  table_rows = page_body.find_all("tr")
-  items = [table_row for table_row in table_rows]
+  # 「会社情報」を代入
+  other_details = soup.find('div', class_="open-page-other-details")
+  company_info = other_details.find('dl')
+  
 
-  # 配列itemsの要素を一つずつ取り出し、hrmosの対応項目と一致した場合にその項目に代入
-  for item in items:
-    table_header = item.find("th").text.strip()
-    table_data = item.find("td").text.strip()
+  dts = job_details.find_all('dt', class_="open-page-job-details__title")
+  headers = [x.text for x in dts]
+  
+  dds = job_details.find_all('dd', class_="open-page-job-details__markdown")
+  datas = [str(x) for x in dds]
+  if len(headers) == len(datas):
+    header_data_pairs = [{"header": h, "data": d} for h, d in zip(headers, datas)]
 
-    #ヘッダー、データ及び項目名を引数に関数呼び出し
-    position, location, employment_type, job_description, required_skills, salary, work_system, benefits, background, selection_process, application_method, posting_date_deadline, other_notes, company_info = assign_data_based_on_header(
-        table_header, table_data, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, background, selection_process, application_method, posting_date_deadline, other_notes, company_info
+  #ヘッダー、データ及び項目名を引数に関数呼び出し
+  for header_data_pair in header_data_pairs:
+    header, data = header_data_pair["header"], header_data_pair["data"]
+    overview, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, selection_process, application_method, posting_date_deadline, company_info = assign_data_based_on_header(
+      header, data, overview, position, location, employment_type, job_description, required_skills, salary, work_system, benefits, selection_process, application_method, posting_date_deadline, company_info
     )
 
   # オブジェクトにデータを整理
-    data = {
-        "概要": overview,  # 募集背景 仕事のやりがい・魅力 業務内容 主な利用技術・開発環境
-        "求人タイトル": job_title,  # シート2に添付の画像を参照
-        "募集ポジション": position,  # 職種名
-        "勤務地": location,  # 勤務地 勤務場所
-        "雇用形態": employment_type,  # 雇用形態 試用期間
-        "仕事内容・業務内容": job_description,  # 職務内容 業務内容
-        "求めるスキル・資格": required_skills,  # 必須スキル・経験 歓迎スキル・経験 必須スキル 歓迎スキル 求める人物像 求める人物像/スキル
-        "給与": salary,  # 給与 給与備考 昇給
-        "勤務体系": work_system,  # 勤務時間 就業時間 所定時間外労働 勤務体系 休日・休暇
-        "福利厚生": benefits,  # 待遇・福利厚生 福利厚生 保険
-        "募集の背景": background,  # 募集背景
-        "選考プロセス": selection_process,  # 選考プロセス 選考フロー
-        "応募方法": application_method,  # 応募方法
-        "掲載日/応募締切日": posting_date_deadline,  # 掲載日 応募締切日
-        "その他の特記事項": other_notes,  # その他の特記事項 参考情報一覧
-        "会社情報": company_info  # 会社名 企業名 設立 設立年月日 代表者 事業内容 資本金 本社所在地 従業員数
-    }
+  #background, other_notesは削除済み
+  data = {
+      "概要": overview,  # 企業・事業概要、HR Tech 事業部について、わたしたちについて、私たちのCredo、EXAWIZARDSとは、プロジェクト例、もっと知りたい方へ、情報、Who we are、直近のリリース情報
+      "求人タイトル": job_title,  # サイト上部
+      "募集ポジション": position,  # 求めるポジション、業務内容、仕事内容、担当いただくプロダクト、担当いただくプロダクト紹介、仕事のやりがい・働く魅力、ポジションの面白さ、ポジションの魅力、ポジションの魅力・得られるスキル、募集背景
+      "勤務地": location,  # 勤務地 勤務場所
+      "雇用形態": employment_type,  # 雇用条件等、雇用形態、契約期間、試用期間
+      "仕事内容・業務内容": job_description,  # 仕事内容、業務内容、職務内容、タレンティオについて、プロダクト詳細
+      "求めるスキル・資格": required_skills,  # 応募資格（必須）、必須条件、応募資格（歓迎）、歓迎条件、求める人物像、求める人材、求める人物像等、キャリアパス
+      "給与": salary,  # 給与、賃金、想定年収、昇給・賞与
+      "勤務体系": work_system,  # 勤務時間、残業、休日、休暇、勤務形態、勤務形態について、働き方
+      "福利厚生": benefits,  # 福利厚生、社会保険、受動喫煙防止措置、諸手当
+      "選考プロセス": selection_process,  # 選考フロー、選考プロセス、面接プロセス、補足、関連資料
+      "応募方法": application_method,  # 
+      "掲載日/応募締切日": posting_date_deadline,  #　
+      "会社情報": company_info  # セクションごと取得
+  }
 
 
-    return data
+  return data
 
 
 
 #会社ページを取得
-company_url = "https://hrmos.co/pages/superstudio/jobs"
+company_url = "https://recruit.talentio.co.jp/r/1/c/talentio/pages/79740"
 
-try:
-  res = requests.get(company_url)
-  res.raise_for_status()
-except requests.RequestException as e:
-  print(f"会社ページの取得に失敗しました。 URL: {e}")
-  exit()
-
-soup = BeautifulSoup(res.text, "html.parser")
-
-
-#会社の求人一覧から、求人ごとの詳細へ遷移するURLを配列で取得
-joblist = soup.find("section", id="jsi-joblist")
-links = joblist.find_all("a")
-urls = [link.get("href") for link in links]
-
-
-#取得したURLを一つずつ取り出し、求人の詳細情報ページを処理
-for url in urls:
-  job_data = process_job_page(url)
+if "pages" in company_url:
+  job_data = process_job_page(company_url)
   if job_data:
     result.append(job_data)
+else:
+  options = Options()
+  options.add_argument('--headless')  # ヘッドレスモードを有効にする
+  driver = webdriver.Chrome(options=options)
+  driver.get(company_url)
+  WebDriverWait(driver, 10)
 
+  html = driver.page_source.encode('utf-8')
+  driver.quit()
+  soup = BeautifulSoup(html, "html.parser")
+  link_parent_spans = soup.find_all('span', class_="open-page-home-requisition-list__link open-page-home__link")
 
-print(result)
+  links = []
+  for link_parent_span in link_parent_spans:
+    link_span = link_parent_span.find('span')
+    links.append(link_span)
+  urls = [x['data-link-url'] for x in links]
+
+  #取得したURLを一つずつ取り出し、求人の詳細情報ページを処理
+  for url in urls:
+    job_data = process_job_page(url)
+    if job_data:
+      result.append(job_data)
+
+  print(result)
